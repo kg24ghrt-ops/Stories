@@ -1,0 +1,63 @@
+name: Render Final Video
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'animation/**'
+      - '.github/workflows/render-video.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-final-video
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy pillow
+
+      - name: Prepare directories
+        run: |
+          mkdir -p animation/scenes animation/assets animation/audio
+
+      - name: Render and assemble complete film
+        working-directory: animation
+        run: python part2.py
+
+      - name: Verify final video
+        run: |
+          test -s animation/one_school_one_day_3d.mp4
+          ffprobe -v error \
+            -show_entries format=duration,size \
+            -of default=noprint_wrappers=1 \
+            animation/one_school_one_day_3d.mp4
+
+      - name: Upload final video
+        uses: actions/upload-artifact@v4
+        with:
+          name: one-school-one-day-final-video
+          path: animation/one_school_one_day_3d.mp4
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 14
