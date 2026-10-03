@@ -1,28 +1,25 @@
-name: Render Final Video
+name: Assemble Final Video
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - 'animation/**'
+      - 'animation/scenes/**'
+      - 'animation/assemble.py'
       - '.github/workflows/render-video.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: render-final-video
+  group: assemble-final-video
   cancel-in-progress: false
 
 jobs:
-  render:
-    name: Render and assemble final film
+  assemble:
+    name: Assemble existing scene clips
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
-    env:
-      PYTHONUNBUFFERED: "1"
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -32,10 +29,7 @@ jobs:
         run: |
           echo "Runner OS: $RUNNER_OS"
           echo "Runner architecture: $RUNNER_ARCH"
-          echo "Runner image: $ImageVersion"
           uname -a
-          python3 --version || true
-          ffmpeg -version 2>/dev/null | head -n 1 || true
           df -h "$GITHUB_WORKSPACE"
 
       - name: Set up Python
@@ -43,53 +37,42 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies
+      - name: Install FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ffmpeg \
-            fonts-dejavu-core
+          sudo apt-get install -y --no-install-recommends ffmpeg
           ffmpeg -version | head -n 1
           ffprobe -version | head -n 1
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install numpy pillow
-          python - <<'PY'
-          import numpy
-          import PIL
-          print("NumPy:", numpy.__version__)
-          print("Pillow:", PIL.__version__)
-          PY
-
-      - name: Prepare render directories
-        run: |
-          mkdir -p animation/scenes animation/assets animation/audio
-
-      - name: Render and assemble complete film
+      - name: Assemble existing scene clips
         working-directory: animation
         run: |
-          python part2.py
+          python assemble.py
 
       - name: Verify final video
         run: |
-          test -s one_school_one_day_3d.mp4
+          test -s one_school_one_day_final.mp4
 
           echo "Final video:"
-          ls -lh one_school_one_day_3d.mp4
+          ls -lh one_school_one_day_final.mp4
 
           echo "Media information:"
           ffprobe -v error \
             -show_entries format=duration,size:stream=codec_type,codec_name,width,height,r_frame_rate \
             -of json \
-            one_school_one_day_3d.mp4
+            one_school_one_day_final.mp4
 
           python - <<'PY'
           import os
-          size = os.path.getsize("one_school_one_day_3d.mp4")
+
+          path = "one_school_one_day_final.mp4"
+          size = os.path.getsize(path)
+
           if size < 1024 * 1024:
-              raise SystemExit(f"Final video is suspiciously small: {size} bytes")
+              raise SystemExit(
+                  f"Final video is suspiciously small: {size} bytes"
+              )
+
           print(f"Final video size: {size:,} bytes")
           PY
 
@@ -97,7 +80,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: one-school-one-day-final-video
-          path: one_school_one_day_3d.mp4
+          path: one_school_one_day_final.mp4
           compression-level: 0
           if-no-files-found: error
           retention-days: 14
